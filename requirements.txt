@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+kiteconnect
+pyotp
+pyyaml
+requests
+numpy

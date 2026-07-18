@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Options Lab — NIFTY Strategy Builder</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">Options<span>Lab</span></div>
+  <div class="quote"><label>NIFTY</label><b id="spot">—</b><small id="spotChg"></small></div>
+  <div class="quote"><label>India VIX</label><b id="vix">—</b></div>
+  <div class="quote"><label>Expiry</label><select id="expirySel"></select></div>
+  <div class="quote"><label>DTE</label><b id="dte">—</b></div>
+  <div class="quote"><label>ATM IV</label><b id="atmIv">—</b></div>
+  <div class="spacer"></div>
+  <div class="quote"><label>Cash</label><b id="cash">—</b></div>
+  <div id="connWrap"><span id="connDot" class="dot off"></span><span id="connText">offline</span>
+    <button id="connectBtn" class="btn small">Connect</button></div>
+</header>
+
+<main>
+  <section id="chainPanel">
+    <div class="panel-title">Option chain <span id="chainTs" class="muted"></span></div>
+    <div class="chain-head">
+      <span>OI</span><span>IV</span><span>CALL LTP</span><span></span>
+      <span class="strike-h">STRIKE</span>
+      <span></span><span>PUT LTP</span><span>IV</span><span>OI</span>
+    </div>
+    <div id="chainBody"></div>
+  </section>
+
+  <section id="builder">
+    <div class="panel" id="genPanel">
+      <div class="panel-title">⚡ Strategy Generator <span class="muted">same-expiry combos, ranked 1 (best) → N (worst)</span></div>
+      <div class="gen-grid">
+        <label>Capital ₹<input id="gCapital" type="number" value="1000000" step="50000"></label>
+        <label>Max risk ₹<input id="gRisk" type="number" value="6000" step="500"></label>
+        <label>View (pts to expiry)<input id="gView" type="number" value="0" step="25" title="+bullish / −bearish / 0 sideways"></label>
+        <label>VRP ratio<input id="gVrp" type="number" value="0.90" step="0.01" min="0.5" max="1.2" title="realized/implied vol prior; 1.0 = pure market"></label>
+        <label>Min POP %<input id="gPop" type="number" value="0" step="5" min="0" max="95"></label>
+        <label>Min R:R<input id="gRr" type="number" value="0" step="0.1" min="0"></label>
+        <label>Max legs<input id="gLegs" type="number" value="6" min="1" max="8"></label>
+        <label>Lots cap<input id="gLots" type="number" value="20" min="1" max="200"></label>
+        <label>Band ± pts<input id="gBand" type="number" value="800" step="50"></label>
+        <label>Results<input id="gTop" type="number" value="100" min="10" max="200"></label>
+        <label>POP weight<input id="gPopW" type="number" value="1.0" step="0.25" min="0" max="3" title="0 = pure EV/CVaR, higher = prefer high-probability structures"></label>
+        <label>Slippage (0-1)<input id="gSlip" type="number" value="0.35" step="0.05" min="0" max="1" title="fraction of half-spread paid on each fill"></label>
+        <label>Max spread %<input id="gSpread" type="number" value="6" step="1" min="1" max="30"></label>
+        <label>Min OI<input id="gOi" type="number" value="0" step="10000" min="0"></label>
+        <label class="chk"><input id="gOtm" type="checkbox" checked> OTM strikes only</label>
+        <label class="chk"><input id="gNaked" type="checkbox"> allow naked shorts</label>
+        <button id="genBtn" class="btn">Generate</button>
+      </div>
+      <div id="genStatus" class="muted"></div>
+      <div id="genResults" class="hiddenx">
+        <table id="genTable">
+          <thead><tr><th>#</th><th>Structure</th><th>Legs</th><th>Score</th><th>EV ₹</th><th>POP</th>
+            <th>CVaR95</th><th>Max P</th><th>Max L</th><th>R:R</th><th>Margin</th><th></th></tr></thead>
+          <tbody id="genBody"></tbody>
+        </table>
+      </div>
+      <div id="adviceBox" class="hiddenx"><div class="panel-title">Claude's verdict</div><pre id="adviceText"></pre></div>
+    </div>
+
+    <div class="templates" id="templates"></div>
+
+    <div class="panel">
+      <div class="panel-title">Strategy legs <button id="clearLegs" class="btn small ghost">Clear</button>
+        <button id="executeBtn" class="btn small exec">Execute basket</button></div>
+      <table id="legsTable">
+        <thead><tr><th>B/S</th><th>Instrument</th><th>Lots</th><th>Entry</th><th>IV %</th><th></th></tr></thead>
+        <tbody id="legsBody"><tr class="empty"><td colspan="6">Click B / S in the chain, or pick a template above</td></tr></tbody>
+      </table>
+    </div>
+
+    <div id="metrics" class="cards"></div>
+
+    <div class="panel">
+      <div class="panel-title">Payoff
+        <span class="legend"><i class="sw exp"></i>At expiry <i class="sw t0"></i>On eval date</span>
+      </div>
+      <div id="payoffChart"></div>
+      <div class="sliders">
+        <div class="srow"><label>Eval date <b id="evalLabel"></b></label>
+          <input type="range" id="dateSlider" min="0" max="100" value="0"></div>
+        <div class="srow"><label>IV shift <b id="ivShiftLabel">0</b> pts</label>
+          <input type="range" id="ivSlider" min="-10" max="10" value="0" step="0.5"></div>
+      </div>
+      <div id="sdRow" class="muted"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Greeks (position)</div>
+      <div id="greeks" class="cards small-cards"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">P&amp;L at expiry</div>
+      <table id="pnlTable"><thead><tr><th>NIFTY @ expiry</th><th>P&amp;L (₹)</th><th>Return on margin</th></tr></thead>
+      <tbody id="pnlBody"></tbody></table>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="hidden">
+  <div class="modal-box">
+    <h3>Confirm basket execution (NRML — hold till expiry)</h3>
+    <div id="modalLegs"></div>
+    <p class="warn">Live market orders on Zerodha. Sell legs are placed first.</p>
+    <input id="confirmInput" placeholder='Type EXECUTE to confirm'>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn ghost">Cancel</button>
+      <button id="modalGo" class="btn exec" disabled>Place orders</button>
+    </div>
+    <div id="modalResult"></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
